@@ -1,47 +1,73 @@
 # Update Log
 
-> Generated: 2026-01-18 00:39
-> v0.0.0 → v0.1.0
+> Generated: 2026-01-18 00:00
+> v0.1.0 → v0.2.0
 
 ## Recommended Commit Message
 
-feat: add Go CLI for cross-platform dependency management
+feat: Add CLI command parsing and argument handling system
 <details>
 <summary>翻譯</summary>
-feat: 新增 Go CLI 用於跨平台 dependency 管理
+feat: 新增 CLI 命令解析與參數處理系統
 </details>
 
 ***
 
 ## Summary
 
-Add Go CLI application that checks and auto-installs required dependencies (sshpass, rsync, ssh, curl, unzip) across Linux and macOS platforms.
+Add comprehensive CLI argument parsing with support for multiple commands (info, export, deploy, clone, domain) and flexible flag handling. Refactor dependency checking into modular function with improved cross-platform package manager support.
 <details>
 <summary>翻譯</summary>
-新增 Go CLI 應用程式，用於檢查並自動安裝必要的依賴套件（sshpass、rsync、ssh、curl、unzip），支援 Linux 與 macOS 平台。
+新增完整的 CLI 參數解析功能，支援多種命令（info、export、deploy、clone、domain）與彈性的 flag 處理。重構依賴檢查為模組化函式，改善跨平台套件管理器支援。
 </details>
 
 ## Changes
 
 ### FEAT
-- Add Go CLI for dependency checking and cross-platform package installation (brew/apt/yum/dnf)
+- Add `parseCommand()` function for CLI command routing (info, export, deploy, clone, domain)
+- Add `PodmanArg` struct to encapsulate parsed CLI arguments
+- Add `parseArgs()` function with support for flags: `-u`, `--folder`, `--type`, `--output`, `-o`, `-f`
+- Add `getLocalDir()` function for local directory validation with docker-compose.yml detection
+- Add `setRemoteDir()` function to generate unique remote paths using MD5 hash of MAC address and folder
+- Add `getMAC()` function for hardware address retrieval
+- Add `isDir()` and `fileExists()` helper functions
 
 <details>
 <summary>翻譯</summary>
 
-- 新增 Go CLI 用於 dependency 檢查與跨平台套件安裝（brew/apt/yum/dnf）
+- 新增 `parseCommand()` 函式用於 CLI 命令路由（info、export、deploy、clone、domain）
+- 新增 `PodmanArg` struct 封裝解析後的 CLI 參數
+- 新增 `parseArgs()` 函式，支援 flags：`-u`、`--folder`、`--type`、`--output`、`-o`、`-f`
+- 新增 `getLocalDir()` 函式，驗證本地目錄並檢測 docker-compose.yml
+- 新增 `setRemoteDir()` 函式，使用 MAC 地址與資料夾的 MD5 hash 產生唯一遠端路徑
+- 新增 `getMAC()` 函式取得硬體地址
+- 新增 `isDir()` 與 `fileExists()` 輔助函式
 
 </details>
 
-### CHORE
-- Initialize Go module (github.com/pardnchiu/go-podrun)
-- Add .gitignore for development artifacts
+### REFACTOR
+- Extract dependency checking logic from `main()` into dedicated `checkRelyPackages()` function
+- Restructure `main()` to use modular error handling pattern
+- Improve Linux package manager detection to support apt, dnf, yum, and pacman
 
 <details>
 <summary>翻譯</summary>
 
-- 初始化 Go module（github.com/pardnchiu/go-podrun）
-- 新增 .gitignore 排除開發檔案
+- 將依賴檢查邏輯從 `main()` 抽取至專用的 `checkRelyPackages()` 函式
+- 重構 `main()` 採用模組化錯誤處理模式
+- 改善 Linux 套件管理器偵測，支援 apt、dnf、yum 與 pacman
+
+</details>
+
+### FIX
+- Fix brew install command by removing incorrect `-y` flag
+- Improve error handling with proper `fmt.Errorf` returns instead of inline prints
+
+<details>
+<summary>翻譯</summary>
+
+- 修正 brew 安裝命令，移除錯誤的 `-y` flag
+- 改善錯誤處理，使用正確的 `fmt.Errorf` 回傳取代行內列印
 
 </details>
 
@@ -51,10 +77,7 @@ Add Go CLI application that checks and auto-installs required dependencies (sshp
 
 | File | Status | Tag |
 |------|--------|-----|
-| `cmd/cli/main.go` | Added | FEAT |
-| `go.mod` | Added | CHORE |
-| `go.sum` | Added | CHORE |
-| `.gitignore` | Added | CHORE |
+| `cmd/cli/main.go` | Modified | FEAT |
 
 ***
 
