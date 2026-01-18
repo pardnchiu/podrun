@@ -77,6 +77,12 @@ func parseArgs(args []string) (*PodmanArg, error) {
 
 	for i := 0; i < len(args); {
 		arg := args[i]
+
+		// 設定 command（第一個非參數）
+		if newArg.Command == "" && !strings.HasPrefix(arg, "-") {
+			newArg.Command = arg
+		}
+
 		switch {
 		case arg == "-d" || arg == "--detach":
 			newArg.Detach = true
@@ -110,18 +116,25 @@ func parseArgs(args []string) (*PodmanArg, error) {
 			newArg.RemoteDir = args[i+1]
 			i += 2
 		case arg == "-f" && i+1 < len(args):
-			if conposeExist {
-				return nil, fmt.Errorf("not supported multiple files")
-			}
-			conposeExist = true
-			newArg.File = args[i+1]
-			if newArg.LocalDir == "" {
-				if dir := filepath.Dir(args[i+1]); dir != "." {
-					newArg.LocalDir = dir
+			if newArg.Command == "logs" {
+				// logs -f 是 follow，直接加入 RemoteArgs
+				newArg.RemoteArgs = append(newArg.RemoteArgs, arg)
+				i++
+			} else {
+				// 其他指令的 -f 是 file
+				if conposeExist {
+					return nil, fmt.Errorf("not supported multiple files")
 				}
+				conposeExist = true
+				newArg.File = args[i+1]
+				if newArg.LocalDir == "" {
+					if dir := filepath.Dir(args[i+1]); dir != "." {
+						newArg.LocalDir = dir
+					}
+				}
+				newArg.RemoteArgs = append(newArg.RemoteArgs, "-f", filepath.Base(args[i+1]))
+				i += 2
 			}
-			newArg.RemoteArgs = append(newArg.RemoteArgs, "-f", filepath.Base(args[i+1]))
-			i += 2
 		case (strings.HasPrefix(arg, "./") || strings.HasPrefix(arg, "/")) && utils.IsDir(arg):
 			if newArg.LocalDir == "" {
 				newArg.LocalDir = arg

@@ -1,105 +1,63 @@
 # Update Log
 
-> Generated: 2026-01-18 09:41 (+00:00)
-> v0.4.0 → v0.5.0
+> Generated: 2026-01-18 10:15 (+00:00)
+> v0.5.0 → v0.6.0
 
 ## Recommended Commit Message
 
-refactor: Move hardcoded credentials to environment variables and reorganize command utilities
+feat: Implement compose subcommands and fix context-aware -f flag parsing
 <details>
 <summary>翻譯</summary>
-refactor: 將硬編碼憑證移至環境變數並重組命令工具
+feat: 實作 compose 子命令並修正上下文感知的 -f 旗標解析
 </details>
 
 ***
 
 ## Summary
 
-Remove hardcoded SSH credentials from source code and migrate to environment variables loaded via godotenv. Reorganize command execution utilities into a dedicated file and improve CLI output formatting with ANSI colors.
+Implement missing compose subcommand handlers (ps, logs, restart, exec, build) via unified `runCMD()` method, and fix argument parsing to correctly distinguish between `logs -f` (follow mode) and `-f <file>` (compose file path) based on command context.
 <details>
 <summary>翻譯</summary>
-從原始碼中移除硬編碼的 SSH 憑證，改為透過 godotenv 載入環境變數。將命令執行工具重組至專用檔案，並使用 ANSI 色彩改善 CLI 輸出格式。
+透過統一的 `runCMD()` 方法實作缺少的 compose 子命令處理器（ps、logs、restart、exec、build），並修正參數解析以根據命令上下文正確區分 `logs -f`（追蹤模式）和 `-f <file>`（compose 檔案路徑）。
 </details>
 
 ## Changes
 
-### SECURITY
-- Remove hardcoded `RemoteServer` and `Password` constants from `checkSSHConnection.go` and `utils.go`
-- Move SSH credentials to environment variables (`PODRUN_SERVER`, `PODRUN_USERNAME`, `PODRUN_PASSWORD`)
-- Add validation for required environment variables with clear error messages
+### FEAT
+- Implement ps, logs, restart, exec, build compose subcommands via unified `runCMD()` handler
+- Wire up previously empty switch cases to execute actual remote commands
 
 <details>
 <summary>翻譯</summary>
 
-- 從 `checkSSHConnection.go` 和 `utils.go` 移除硬編碼的 `RemoteServer` 和 `Password` 常數
-- 將 SSH 憑證移至環境變數（`PODRUN_SERVER`、`PODRUN_USERNAME`、`PODRUN_PASSWORD`）
-- 新增必要環境變數驗證，提供清楚的錯誤訊息
+- 透過統一的 `runCMD()` handler 實作 ps、logs、restart、exec、build compose 子命令
+- 將先前空的 switch cases 連接至實際執行遠端命令
 
 </details>
 
-### FEAT
-- Add `Detach` field to `PodmanArg` struct for tracking detach state
-- Add parsing support for `-d`/`--detach` flag in argument parser
+### FIX
+- Fix `-f` flag parsing to correctly handle `logs -f` as follow flag instead of file path
+- Add early command detection in `parseArgs()` to determine context before flag processing
 
 <details>
 <summary>翻譯</summary>
 
-- 在 `PodmanArg` struct 新增 `Detach` 欄位用於追蹤分離狀態
-- 在參數解析器新增 `-d`/`--detach` 旗標的解析支援
+- 修正 `-f` 旗標解析，正確處理 `logs -f` 為追蹤旗標而非檔案路徑
+- 在 `parseArgs()` 新增提前命令偵測，在旗標處理前確定上下文
 
 </details>
 
 ### REFACTOR
-- Extract command execution utilities (`CMDRun`, `SSHTest`, `SSHRun`, `SSEOutput`) to `internal/utils/command.go`
-- Add `Podrun` struct and `GetENV()` function for centralized environment configuration
-- Replace inline detach flag checking with `p.Detach` field access
-- Add ANSI color constants (`Reset`, `Hint`, `Ok`, `Error`, `Warn`) for CLI output formatting
-- Improve compose output with colored section dividers
-- Inline brew install logic and remove redundant `installPackage()` helper
-- Add `init()` function with godotenv for `.env` file loading
+- Consolidate down, ps, logs, restart, exec, build cases into single `runCMD()` method
+- Move ANSI color constants to top of `composeCMD.go` file
+- Simplify remote command execution by removing grep filter
 
 <details>
 <summary>翻譯</summary>
 
-- 將命令執行工具（`CMDRun`、`SSHTest`、`SSHRun`、`SSEOutput`）抽取至 `internal/utils/command.go`
-- 新增 `Podrun` struct 和 `GetENV()` 函式用於集中式環境設定
-- 將內聯 detach 旗標檢查替換為 `p.Detach` 欄位存取
-- 新增 ANSI 色彩常數（`Reset`、`Hint`、`Ok`、`Error`、`Warn`）用於 CLI 輸出格式化
-- 使用彩色區段分隔線改善 compose 輸出
-- 內聯 brew 安裝邏輯並移除冗餘的 `installPackage()` helper
-- 新增 `init()` 函式配合 godotenv 載入 `.env` 檔案
-
-</details>
-
-### REMOVE
-- Delete `internal/command/checkSSHConnection.go` (functionality moved to `utils.SSHTest()`)
-- Remove debug `slog.Info` calls from compose commands
-
-<details>
-<summary>翻譯</summary>
-
-- 刪除 `internal/command/checkSSHConnection.go`（功能已移至 `utils.SSHTest()`）
-- 從 compose 命令移除除錯用的 `slog.Info` 呼叫
-
-</details>
-
-### ADD
-- Add `.env.expample` template file for environment configuration
-
-<details>
-<summary>翻譯</summary>
-
-- 新增 `.env.expample` 範本檔案用於環境設定
-
-</details>
-
-### CHORE
-- Add `github.com/joho/godotenv v1.5.1` dependency
-
-<details>
-<summary>翻譯</summary>
-
-- 新增 `github.com/joho/godotenv v1.5.1` 依賴
+- 將 down、ps、logs、restart、exec、build cases 整合至單一 `runCMD()` 方法
+- 將 ANSI 色彩常數移至 `composeCMD.go` 檔案頂部
+- 移除 grep 過濾器以簡化遠端命令執行
 
 </details>
 
@@ -109,16 +67,8 @@ Remove hardcoded SSH credentials from source code and migrate to environment var
 
 | File | Status | Tag |
 |------|--------|-----|
-| `cmd/cli/main.go` | Modified | REFACTOR |
-| `go.mod` | Modified | CHORE |
-| `go.sum` | Modified | CHORE |
-| `internal/command/checkSSHConnection.go` | Deleted | SECURITY, REMOVE |
-| `internal/command/command.go` | Modified | FEAT |
-| `internal/command/composeCMD.go` | Modified | REFACTOR |
-| `internal/utils/checkRelyPackages.go` | Modified | REFACTOR |
-| `internal/utils/utils.go` | Modified | SECURITY, REFACTOR |
-| `internal/utils/command.go` | Added | REFACTOR |
-| `.env.expample` | Added | ADD |
+| `internal/command/command.go` | Modified | FIX |
+| `internal/command/composeCMD.go` | Modified | FEAT, REFACTOR |
 
 ***
 

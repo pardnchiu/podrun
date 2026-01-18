@@ -9,6 +9,14 @@ import (
 	"github.com/pardnchiu/go-podrun/internal/utils"
 )
 
+const (
+	Reset = "\033[0m"
+	Hint  = "\033[90m"
+	Ok    = "\033[32m"
+	Error = "\033[31m"
+	Warn  = "\033[33m"
+)
+
 type Deploy struct {
 	UID       string
 	PodID     string
@@ -42,24 +50,11 @@ func (p *PodmanArg) ComposeCMD() (string, error) {
 	switch p.Command {
 	case "up":
 		return p.up(d)
-	case "down":
-		return p.down(d)
-	case "ps":
-	case "logs":
-	case "restart":
-	case "exec":
-	case "build":
+	case "down", "ps", "logs", "restart", "exec", "build":
+		return p.runCMD(d)
 	}
 	return p.UID, nil
 }
-
-const (
-	Reset = "\033[0m"
-	Hint  = "\033[90m"
-	Ok    = "\033[32m"
-	Error = "\033[31m"
-	Warn  = "\033[33m"
-)
 
 func (p *PodmanArg) up(d *Deploy) (string, error) {
 	fmt.Println("[+] create folder if not exist")
@@ -122,16 +117,14 @@ func (p *PodmanArg) up(d *Deploy) (string, error) {
 	return p.UID, nil
 }
 
-func (p *PodmanArg) down(d *Deploy) (string, error) {
-	// * 執行動作
+func (p *PodmanArg) runCMD(d *Deploy) (string, error) {
 	fmt.Printf("[*] executing: podman compose %s\n", strings.Join(p.RemoteArgs, " "))
 	fmt.Println(Hint + "──────────────────────────────────────────────────")
-	cmd := fmt.Sprintf(
-		"cd '%s' && podman compose %s 2>&1 | grep -v 'no container\\|no pod' || true",
+	if err := utils.SSHRun(fmt.Sprintf(
+		"cd '%s' && podman compose %s",
 		p.RemoteDir,
-		shellJoin(p.RemoteArgs),
-	)
-	if err := utils.SSHRun(cmd); err != nil {
+		shellJoin(p.RemoteArgs)),
+	); err != nil {
 		return "", err
 	}
 	fmt.Println(Hint + "──────────────────────────────────────────────────" + Reset)
