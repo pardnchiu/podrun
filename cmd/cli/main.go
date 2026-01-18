@@ -5,9 +5,17 @@ import (
 	"log/slog"
 	"os"
 
+	"github.com/joho/godotenv"
 	"github.com/pardnchiu/go-podrun/internal/command"
 	"github.com/pardnchiu/go-podrun/internal/utils"
 )
+
+func init() {
+	if err := godotenv.Load(); err != nil {
+		slog.Warn("Error loading .env file",
+			slog.String("error", err.Error()))
+	}
+}
 
 func main() {
 	if err := utils.CheckRelyPackages(); err != nil {
@@ -15,28 +23,33 @@ func main() {
 		os.Exit(1)
 	}
 
-	parseCmd, err := command.New()
+	_, err := utils.GetENV()
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
 	}
 
-	if err := command.CheckSSHConnection(); err != nil {
+	cmd, err := command.New()
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+
+	if err := utils.SSHTest(); err != nil {
 		slog.Error("failed to connect to remote server",
 			"err", err)
 		os.Exit(1)
 	}
 
-	switch parseCmd.RemoteArgs[0] {
+	switch cmd.RemoteArgs[0] {
 	case "domain":
 	case "deploy":
 	default:
-		uid, err := parseCmd.ComposeCMD()
+		_, err := cmd.ComposeCMD()
 		if err != nil {
 			slog.Error("failed to connect to remote server",
 				"err", err)
 		}
-		slog.Info(uid)
 		// case "rm":
 		// case "ports":
 		// case "export":

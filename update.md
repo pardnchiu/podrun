@@ -1,65 +1,105 @@
 # Update Log
 
-> Generated: 2026-01-18 08:00 (+00:00)
-> v0.3.0 → v0.4.0
+> Generated: 2026-01-18 09:41 (+00:00)
+> v0.4.0 → v0.5.0
 
 ## Recommended Commit Message
 
-refactor: Restructure compose commands with dispatcher pattern and add down command
+refactor: Move hardcoded credentials to environment variables and reorganize command utilities
 <details>
 <summary>翻譯</summary>
-refactor: 重構 compose 命令為 dispatcher 模式並新增 down 命令
+refactor: 將硬編碼憑證移至環境變數並重組命令工具
 </details>
 
 ***
 
 ## Summary
 
-Refactored the compose command architecture from a single `Up()` method to a unified `ComposeCMD()` dispatcher pattern supporting multiple compose subcommands. Added `down` command implementation.
+Remove hardcoded SSH credentials from source code and migrate to environment variables loaded via godotenv. Reorganize command execution utilities into a dedicated file and improve CLI output formatting with ANSI colors.
 <details>
 <summary>翻譯</summary>
-重構 compose 命令架構，從單一 `Up()` 方法改為統一的 `ComposeCMD()` dispatcher 模式，支援多個 compose 子命令。新增 `down` 命令實作。
+從原始碼中移除硬編碼的 SSH 憑證，改為透過 godotenv 載入環境變數。將命令執行工具重組至專用檔案，並使用 ANSI 色彩改善 CLI 輸出格式。
 </details>
 
 ## Changes
 
-### FEAT
-- Add `down` command for stopping and removing containers via `podman compose down`
-- Add `Command` field to `PodmanArg` struct for command routing
-- Prepare dispatcher skeleton for future commands: `ps`, `logs`, `restart`, `exec`, `build`
+### SECURITY
+- Remove hardcoded `RemoteServer` and `Password` constants from `checkSSHConnection.go` and `utils.go`
+- Move SSH credentials to environment variables (`PODRUN_SERVER`, `PODRUN_USERNAME`, `PODRUN_PASSWORD`)
+- Add validation for required environment variables with clear error messages
 
 <details>
 <summary>翻譯</summary>
 
-- 新增 `down` 命令，透過 `podman compose down` 停止並移除容器
-- 在 `PodmanArg` struct 新增 `Command` 欄位用於命令路由
-- 準備未來命令的 dispatcher 骨架：`ps`、`logs`、`restart`、`exec`、`build`
+- 從 `checkSSHConnection.go` 和 `utils.go` 移除硬編碼的 `RemoteServer` 和 `Password` 常數
+- 將 SSH 憑證移至環境變數（`PODRUN_SERVER`、`PODRUN_USERNAME`、`PODRUN_PASSWORD`）
+- 新增必要環境變數驗證，提供清楚的錯誤訊息
+
+</details>
+
+### FEAT
+- Add `Detach` field to `PodmanArg` struct for tracking detach state
+- Add parsing support for `-d`/`--detach` flag in argument parser
+
+<details>
+<summary>翻譯</summary>
+
+- 在 `PodmanArg` struct 新增 `Detach` 欄位用於追蹤分離狀態
+- 在參數解析器新增 `-d`/`--detach` 旗標的解析支援
 
 </details>
 
 ### REFACTOR
-- Restructure compose handling from `Up()` to `ComposeCMD()` dispatcher pattern
-- Rename `modifyComposeFile` to `ModifyComposeFile` (exported method)
-- Move compose-related functions to `composeCMD.go` for better organization
-- Change CLI routing from explicit `"up"` case to `default` case for all compose commands
+- Extract command execution utilities (`CMDRun`, `SSHTest`, `SSHRun`, `SSEOutput`) to `internal/utils/command.go`
+- Add `Podrun` struct and `GetENV()` function for centralized environment configuration
+- Replace inline detach flag checking with `p.Detach` field access
+- Add ANSI color constants (`Reset`, `Hint`, `Ok`, `Error`, `Warn`) for CLI output formatting
+- Improve compose output with colored section dividers
+- Inline brew install logic and remove redundant `installPackage()` helper
+- Add `init()` function with godotenv for `.env` file loading
 
 <details>
 <summary>翻譯</summary>
 
-- 重構 compose 處理從 `Up()` 改為 `ComposeCMD()` dispatcher 模式
-- 將 `modifyComposeFile` 重新命名為 `ModifyComposeFile`（匯出方法）
-- 將 compose 相關函式移至 `composeCMD.go` 以改善組織結構
-- 將 CLI 路由從明確的 `"up"` case 改為 `default` case 以處理所有 compose 命令
+- 將命令執行工具（`CMDRun`、`SSHTest`、`SSHRun`、`SSEOutput`）抽取至 `internal/utils/command.go`
+- 新增 `Podrun` struct 和 `GetENV()` 函式用於集中式環境設定
+- 將內聯 detach 旗標檢查替換為 `p.Detach` 欄位存取
+- 新增 ANSI 色彩常數（`Reset`、`Hint`、`Ok`、`Error`、`Warn`）用於 CLI 輸出格式化
+- 使用彩色區段分隔線改善 compose 輸出
+- 內聯 brew 安裝邏輯並移除冗餘的 `installPackage()` helper
+- 新增 `init()` 函式配合 godotenv 載入 `.env` 檔案
 
 </details>
 
 ### REMOVE
-- Remove `internal/command/up.go` (functionality migrated to `composeCMD.go`)
+- Delete `internal/command/checkSSHConnection.go` (functionality moved to `utils.SSHTest()`)
+- Remove debug `slog.Info` calls from compose commands
 
 <details>
 <summary>翻譯</summary>
 
-- 移除 `internal/command/up.go`（功能已遷移至 `composeCMD.go`）
+- 刪除 `internal/command/checkSSHConnection.go`（功能已移至 `utils.SSHTest()`）
+- 從 compose 命令移除除錯用的 `slog.Info` 呼叫
+
+</details>
+
+### ADD
+- Add `.env.expample` template file for environment configuration
+
+<details>
+<summary>翻譯</summary>
+
+- 新增 `.env.expample` 範本檔案用於環境設定
+
+</details>
+
+### CHORE
+- Add `github.com/joho/godotenv v1.5.1` dependency
+
+<details>
+<summary>翻譯</summary>
+
+- 新增 `github.com/joho/godotenv v1.5.1` 依賴
 
 </details>
 
@@ -70,9 +110,15 @@ Refactored the compose command architecture from a single `Up()` method to a uni
 | File | Status | Tag |
 |------|--------|-----|
 | `cmd/cli/main.go` | Modified | REFACTOR |
+| `go.mod` | Modified | CHORE |
+| `go.sum` | Modified | CHORE |
+| `internal/command/checkSSHConnection.go` | Deleted | SECURITY, REMOVE |
 | `internal/command/command.go` | Modified | FEAT |
-| `internal/command/up.go` | Deleted | REMOVE |
-| `internal/command/composeCMD.go` | Added | REFACTOR |
+| `internal/command/composeCMD.go` | Modified | REFACTOR |
+| `internal/utils/checkRelyPackages.go` | Modified | REFACTOR |
+| `internal/utils/utils.go` | Modified | SECURITY, REFACTOR |
+| `internal/utils/command.go` | Added | REFACTOR |
+| `.env.expample` | Added | ADD |
 
 ***
 

@@ -19,6 +19,9 @@ type PodmanArg struct {
 	RemoteArgs []string
 	Target     string
 	File       string
+
+	// state
+	Detach bool
 }
 
 func New() (*PodmanArg, error) {
@@ -75,6 +78,10 @@ func parseArgs(args []string) (*PodmanArg, error) {
 	for i := 0; i < len(args); {
 		arg := args[i]
 		switch {
+		case arg == "-d" || arg == "--detach":
+			newArg.Detach = true
+			newArg.RemoteArgs = append(newArg.RemoteArgs, arg)
+			i++
 		case arg == "-u" && i+1 < len(args):
 			newArg.UID = args[i+1]
 			i += 2

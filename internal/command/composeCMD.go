@@ -2,7 +2,6 @@ package command
 
 import (
 	"fmt"
-	"log/slog"
 	"path/filepath"
 	"strings"
 	"time"
@@ -39,8 +38,6 @@ func (p *PodmanArg) ComposeCMD() (string, error) {
 		Creator:   utils.GetHostName(),
 		Replicas:  1,
 	}
-	slog.Info("up",
-		slog.Any("arg", p))
 
 	switch p.Command {
 	case "up":
@@ -56,47 +53,46 @@ func (p *PodmanArg) ComposeCMD() (string, error) {
 	return p.UID, nil
 }
 
+const (
+	Reset = "\033[0m"
+	Hint  = "\033[90m"
+	Ok    = "\033[32m"
+	Error = "\033[31m"
+	Warn  = "\033[33m"
+)
+
 func (p *PodmanArg) up(d *Deploy) (string, error) {
-	slog.Info("Deploying",
-		slog.Any("deploy", d),
-		slog.Any("arg", p))
-
-	hasDetach := false
-	for _, arg := range p.RemoteArgs {
-		if arg == "-d" || arg == "--detach" {
-			hasDetach = true
-			break
-		}
-	}
-
-	fmt.Println("[*] create folder if not exist")
+	fmt.Println("[+] create folder if not exist")
 	if err := utils.SSHRun("mkdir", "-p", p.RemoteDir); err != nil {
 		return "", err
 	}
 
+	// * 同步檔案夾資料
 	fmt.Println("[*] syncing files")
-	fmt.Println("──────────────────────────────────────────────────")
+	fmt.Println(Hint + "──────────────────────────────────────────────────")
 	if err := p.RsyncToRemote(); err != nil {
 		return "", err
 	}
-	fmt.Println("──────────────────────────────────────────────────")
+	fmt.Println("──────────────────────────────────────────────────" + Reset)
 
+	// * 調整 docker-compose.yml 內容
 	fmt.Println("[*] modifying compose file (remove ports)")
 	if err := p.ModifyComposeFile(); err != nil {
-		return "", fmt.Errorf("failed to modify compose file: %w", err)
+		return "", fmt.Errorf("[x] failed to modify compose file: %w", err)
 	}
 
+	// * 關閉舊的容器 (if exists)
 	fmt.Println("[*] cleaning up old containers")
-	// fmt.Println("──────────────────────────────────────────────────")
-	if err := utils.SSHRun(fmt.Sprintf("cd '%s' && podman compose down 2>/dev/null || true", p.RemoteDir)); err != nil {
-		slog.Warn("failed to clean up old containers", "err", err)
-	}
-	// fmt.Println("──────────────────────────────────────────────────")
+	_, _ = utils.SSEOutput(fmt.Sprintf(
+		"cd '%s' && podman compose down -v >/dev/null 2>&1",
+		p.RemoteDir,
+	))
 
+	// * 執行動作
 	fmt.Printf("[*] executing: podman compose %s\n", strings.Join(p.RemoteArgs, " "))
-	fmt.Println("──────────────────────────────────────────────────")
-	remoteCmd := fmt.Sprintf("cd '%s' && podman compose %s", p.RemoteDir, shellJoin(p.RemoteArgs))
-	if !hasDetach {
+	fmt.Println(Hint + "──────────────────────────────────────────────────")
+	remoteCmd := fmt.Sprintf("cd '%s' && podman compose %s 2>&1", p.RemoteDir, shellJoin(p.RemoteArgs))
+	if !p.Detach {
 		remoteCmd = fmt.Sprintf(`
 				cleanup() {
 					echo "[*] stopping containers"
@@ -106,44 +102,50 @@ func (p *PodmanArg) up(d *Deploy) (string, error) {
 				%s
 			`, p.RemoteDir, remoteCmd)
 	}
-
-	err := utils.SSHRun(remoteCmd)
-	if err != nil {
+	if err := utils.SSHRun(remoteCmd); err != nil {
 		return "", err
 	}
-	fmt.Println("──────────────────────────────────────────────────")
+	fmt.Println(Hint + "──────────────────────────────────────────────────" + Reset)
 
-	if hasDetach {
+	// * 輸出結果
+	if p.Detach {
 		fmt.Println("[*] service ports:")
-		fmt.Println("──────────────────────────────────────────────────")
-		output, _ := utils.SSEOutput(fmt.Sprintf("cd '%s' && podman ps --filter 'label=io.podman.compose.project=%s' --format 'table {{.Names}}\t{{.Ports}}'",
+		fmt.Println(Ok + "──────────────────────────────────────────────────")
+		output, _ := utils.SSEOutput(fmt.Sprintf(
+			"cd '%s' && podman ps --filter 'label=io.podman.compose.project=%s' --format 'table {{.Names}}\t{{.Ports}}'",
 			p.RemoteDir,
-			filepath.Base(p.RemoteDir)))
+			filepath.Base(p.RemoteDir)),
+		)
 		fmt.Println(output)
-		fmt.Println("──────────────────────────────────────────────────")
+		fmt.Println("──────────────────────────────────────────────────" + Reset)
 	}
 	return p.UID, nil
 }
 
 func (p *PodmanArg) down(d *Deploy) (string, error) {
-	slog.Info("down",
-		slog.Any("arg", p))
-
+	// * 執行動作
 	fmt.Printf("[*] executing: podman compose %s\n", strings.Join(p.RemoteArgs, " "))
-	fmt.Println("──────────────────────────────────────────────────")
-	remoteCmd := fmt.Sprintf("cd '%s' && podman compose %s", p.RemoteDir, shellJoin(p.RemoteArgs))
-
-	err := utils.SSHRun(remoteCmd)
-	if err != nil {
+	fmt.Println(Hint + "──────────────────────────────────────────────────")
+	cmd := fmt.Sprintf(
+		"cd '%s' && podman compose %s 2>&1 | grep -v 'no container\\|no pod' || true",
+		p.RemoteDir,
+		shellJoin(p.RemoteArgs),
+	)
+	if err := utils.SSHRun(cmd); err != nil {
 		return "", err
 	}
-	fmt.Println("──────────────────────────────────────────────────")
+	fmt.Println(Hint + "──────────────────────────────────────────────────" + Reset)
 	return p.UID, nil
 }
 
 func (p *PodmanArg) RsyncToRemote() error {
+	env, err := utils.GetENV()
+	if err != nil {
+		return err
+	}
+
 	cmdArgs := []string{
-		"-p", Password,
+		"-p", env.Password,
 		"rsync",
 		"-avz", "--delete",
 		"--exclude=node_modules/", "--exclude=vendor/", "--exclude=__pycache__/",
@@ -152,7 +154,7 @@ func (p *PodmanArg) RsyncToRemote() error {
 		"--exclude=*.log", "--exclude=.DS_Store", "--exclude=Thumbs.db",
 		"-e", "ssh -o StrictHostKeyChecking=no",
 		p.LocalDir + "/",
-		fmt.Sprintf("%s:%s/", RemoteServer, p.RemoteDir),
+		fmt.Sprintf("%s:%s/", env.Remote, p.RemoteDir),
 	}
 	return utils.CMDRun("sshpass", cmdArgs...)
 }

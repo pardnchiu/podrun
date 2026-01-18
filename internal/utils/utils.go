@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"net"
 	"os"
-	"os/exec"
 	"strings"
 )
 
@@ -31,57 +30,36 @@ func GetMAC() (string, error) {
 	return "", fmt.Errorf("no valid MAC address found")
 }
 
-func CMDRun(main string, args ...string) error {
-	cmd := exec.Command(main, args...)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	cmd.Stdin = os.Stdin
-	if err := cmd.Run(); err != nil {
-		return err
-	}
-	return nil
+type Podrun struct {
+	Server   string
+	Username string
+	Password string
+	Remote   string
 }
 
-func CMDOutput(main string, args ...string) (string, error) {
-	out, err := exec.Command(main, args...).Output()
-	return string(out), err
-}
-
-const (
-	remoteServer = "podrun@10.7.22.101"
-	password     = "passwd"
-)
-
-func SSHRun(args ...string) error {
-	command := strings.Join(args, " ")
-	cmdArgs := []string{
-		"-p", password,
-		"ssh",
-		"-tt",
-		"-o", "StrictHostKeyChecking=no",
-		"-o", "LogLevel=QUIET",
-		remoteServer,
-		command,
+func GetENV() (*Podrun, error) {
+	server := os.Getenv("PODRUN_SERVER")
+	username := os.Getenv("PODRUN_USERNAME")
+	password := os.Getenv("PODRUN_PASSWORD")
+	if server == "" || username == "" || password == "" {
+		var missing []string
+		if server == "" {
+			missing = append(missing, "PODRUN_SERVER")
+		}
+		if username == "" {
+			missing = append(missing, "PODRUN_USERNAME")
+		}
+		if password == "" {
+			missing = append(missing, "PODRUN_PASSWORD")
+		}
+		return nil, fmt.Errorf("missing required environment: %s", strings.Join(missing, ", "))
 	}
-	cmd := exec.Command("sshpass", cmdArgs...)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	cmd.Stdin = os.Stdin
-
-	return cmd.Run()
-}
-
-func SSEOutput(args ...string) (string, error) {
-	command := strings.Join(args, " ")
-	cmdArgs := []string{
-		"-p", password,
-		"ssh",
-		"-o", "StrictHostKeyChecking=no",
-		"-o", "LogLevel=QUIET",
-		remoteServer,
-		command,
-	}
-	return CMDOutput("sshpass", cmdArgs...)
+	return &Podrun{
+		Server:   server,
+		Username: username,
+		Password: password,
+		Remote:   fmt.Sprintf("%s@%s", username, server),
+	}, nil
 }
 
 func GetHostName() string {

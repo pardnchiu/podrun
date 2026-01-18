@@ -39,9 +39,15 @@ func CheckRelyPackages() error {
 			}
 		}
 		args := append([]string{"install"}, missPackages...)
-		if err := installPackage("brew", args...); err != nil {
-			return fmt.Errorf("[x] failed to install packages: %s", err)
+
+		if _, err := exec.LookPath("brew"); err != nil {
+			return err
 		}
+		err := CMDRun("brew", args...)
+		if err != nil {
+			return err
+		}
+		return nil
 
 	case "linux":
 		pkgManagers := []struct {
@@ -70,17 +76,5 @@ func CheckRelyPackages() error {
 	}
 
 	fmt.Println("──────────────────────────────────────────────────")
-	return nil
-}
-
-func installPackage(pkg string, args ...string) error {
-	if _, err := exec.LookPath(pkg); err != nil {
-		return err
-	}
-
-	err := CMDRun(pkg, args...)
-	if err != nil {
-		return err
-	}
 	return nil
 }
