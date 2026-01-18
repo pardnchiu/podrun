@@ -1,85 +1,65 @@
 # Update Log
 
-> Generated: 2026-01-18 16:15
-> v0.2.0 → v0.3.0
+> Generated: 2026-01-18 08:00 (+00:00)
+> v0.3.0 → v0.4.0
 
 ## Recommended Commit Message
 
-feat: Add container deployment via SSH with rsync synchronization
+refactor: Restructure compose commands with dispatcher pattern and add down command
 <details>
 <summary>翻譯</summary>
-feat: 新增透過 SSH 進行容器部署與 rsync 同步功能
+refactor: 重構 compose 命令為 dispatcher 模式並新增 down 命令
 </details>
 
 ***
 
 ## Summary
 
-Add complete container deployment workflow including SSH connection validation, file synchronization via rsync, and remote podman compose execution. Introduce PostgreSQL database integration for future deployment tracking.
+Refactored the compose command architecture from a single `Up()` method to a unified `ComposeCMD()` dispatcher pattern supporting multiple compose subcommands. Added `down` command implementation.
 <details>
 <summary>翻譯</summary>
-新增完整的容器部署流程，包含 SSH 連線驗證、透過 rsync 進行檔案同步、以及遠端 podman compose 執行。引入 PostgreSQL 資料庫整合，為未來部署追蹤做準備。
+重構 compose 命令架構，從單一 `Up()` 方法改為統一的 `ComposeCMD()` dispatcher 模式，支援多個 compose 子命令。新增 `down` 命令實作。
 </details>
 
 ## Changes
 
 ### FEAT
-- Add `Up()` method for deploying containers to remote server via SSH and podman compose
-- Add `Deploy` struct to represent deployment metadata (UID, PodID, LocalDir, RemoteDir, Status, etc.)
-- Add `CheckSSHConnection()` function to validate SSH connectivity before deployment
-- Add `RsyncToRemote()` method for synchronizing local files to remote server with exclusion patterns
-- Add command routing in main.go for `domain`, `deploy`, `up` subcommands
-- Add `SSHRun()` and `SSEOutput()` utility functions for remote command execution
-- Add `CMDOutput()` utility function for capturing local command output
-- Add `modifyComposeFile()` to strip host ports and add SELinux `:z` labels for volume mounts
+- Add `down` command for stopping and removing containers via `podman compose down`
+- Add `Command` field to `PodmanArg` struct for command routing
+- Prepare dispatcher skeleton for future commands: `ps`, `logs`, `restart`, `exec`, `build`
 
 <details>
 <summary>翻譯</summary>
 
-- 新增 `Up()` method，透過 SSH 與 podman compose 部署容器至遠端伺服器
-- 新增 `Deploy` struct 表示部署 metadata（UID、PodID、LocalDir、RemoteDir、Status 等）
-- 新增 `CheckSSHConnection()` 函式，於部署前驗證 SSH 連線
-- 新增 `RsyncToRemote()` method，使用排除規則同步本地檔案至遠端伺服器
-- 新增 main.go 命令路由，支援 `domain`、`deploy`、`up` 子命令
-- 新增 `SSHRun()` 與 `SSEOutput()` 工具函式執行遠端命令
-- 新增 `CMDOutput()` 工具函式擷取本地命令輸出
-- 新增 `modifyComposeFile()` 移除 host ports 並為 volume mounts 加入 SELinux `:z` 標籤
-
-</details>
-
-### UPDATE
-- Update `setRemoteDir()` to return UID (MD5 hash) along with remote directory path
-- Change default `Target` from "pod" to "podman"
-- Update `CMDRun()` (formerly `CmdExec()`) to attach stdin for interactive commands
-
-<details>
-<summary>翻譯</summary>
-
-- 更新 `setRemoteDir()` 同時回傳 UID（MD5 hash）與遠端目錄路徑
-- 將預設 `Target` 從 "pod" 改為 "podman"
-- 更新 `CMDRun()`（原 `CmdExec()`）附加 stdin 以支援互動式命令
-
-</details>
-
-### FIX
-- Fix `getLocalDir()` to properly handle `filepath.Abs()` error instead of ignoring it
-- Improve error messages in `getLocalDir()` for clarity
-
-<details>
-<summary>翻譯</summary>
-
-- 修正 `getLocalDir()` 正確處理 `filepath.Abs()` 錯誤，而非忽略
-- 改善 `getLocalDir()` 錯誤訊息的清晰度
+- 新增 `down` 命令，透過 `podman compose down` 停止並移除容器
+- 在 `PodmanArg` struct 新增 `Command` 欄位用於命令路由
+- 準備未來命令的 dispatcher 骨架：`ps`、`logs`、`restart`、`exec`、`build`
 
 </details>
 
 ### REFACTOR
-- Rename `CmdExec()` to `CMDRun()` for naming consistency with `CMDOutput()`
+- Restructure compose handling from `Up()` to `ComposeCMD()` dispatcher pattern
+- Rename `modifyComposeFile` to `ModifyComposeFile` (exported method)
+- Move compose-related functions to `composeCMD.go` for better organization
+- Change CLI routing from explicit `"up"` case to `default` case for all compose commands
 
 <details>
 <summary>翻譯</summary>
 
-- 將 `CmdExec()` 重新命名為 `CMDRun()` 以與 `CMDOutput()` 命名一致
+- 重構 compose 處理從 `Up()` 改為 `ComposeCMD()` dispatcher 模式
+- 將 `modifyComposeFile` 重新命名為 `ModifyComposeFile`（匯出方法）
+- 將 compose 相關函式移至 `composeCMD.go` 以改善組織結構
+- 將 CLI 路由從明確的 `"up"` case 改為 `default` case 以處理所有 compose 命令
+
+</details>
+
+### REMOVE
+- Remove `internal/command/up.go` (functionality migrated to `composeCMD.go`)
+
+<details>
+<summary>翻譯</summary>
+
+- 移除 `internal/command/up.go`（功能已遷移至 `composeCMD.go`）
 
 </details>
 
@@ -89,12 +69,10 @@ Add complete container deployment workflow including SSH connection validation, 
 
 | File | Status | Tag |
 |------|--------|-----|
-| `cmd/cli/main.go` | Modified | FEAT |
-| `internal/command/command.go` | Modified | UPDATE |
-| `internal/command/checkSSHConnection.go` | Added | FEAT |
-| `internal/command/up.go` | Added | FEAT |
-| `internal/utils/utils.go` | Modified | FEAT |
-| `internal/utils/checkRelyPackages.go` | Modified | REFACTOR |
+| `cmd/cli/main.go` | Modified | REFACTOR |
+| `internal/command/command.go` | Modified | FEAT |
+| `internal/command/up.go` | Deleted | REMOVE |
+| `internal/command/composeCMD.go` | Added | REFACTOR |
 
 ***
 

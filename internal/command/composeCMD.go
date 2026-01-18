@@ -26,7 +26,7 @@ type Deploy struct {
 	UpdatedAt time.Time // TODO: for record to database
 }
 
-func (p *PodmanArg) Up() (string, error) {
+func (p *PodmanArg) ComposeCMD() (string, error) {
 	d := &Deploy{
 		UID:       p.UID,
 		PodID:     filepath.Base(p.RemoteDir),
@@ -39,8 +39,27 @@ func (p *PodmanArg) Up() (string, error) {
 		Creator:   utils.GetHostName(),
 		Replicas:  1,
 	}
+	slog.Info("up",
+		slog.Any("arg", p))
+
+	switch p.Command {
+	case "up":
+		return p.up(d)
+	case "down":
+		return p.down(d)
+	case "ps":
+	case "logs":
+	case "restart":
+	case "exec":
+	case "build":
+	}
+	return p.UID, nil
+}
+
+func (p *PodmanArg) up(d *Deploy) (string, error) {
 	slog.Info("Deploying",
-		slog.Any("deploy", d))
+		slog.Any("deploy", d),
+		slog.Any("arg", p))
 
 	hasDetach := false
 	for _, arg := range p.RemoteArgs {
@@ -63,7 +82,7 @@ func (p *PodmanArg) Up() (string, error) {
 	fmt.Println("──────────────────────────────────────────────────")
 
 	fmt.Println("[*] modifying compose file (remove ports)")
-	if err := modifyComposeFile(p.RemoteDir); err != nil {
+	if err := p.ModifyComposeFile(); err != nil {
 		return "", fmt.Errorf("failed to modify compose file: %w", err)
 	}
 
@@ -106,6 +125,22 @@ func (p *PodmanArg) Up() (string, error) {
 	return p.UID, nil
 }
 
+func (p *PodmanArg) down(d *Deploy) (string, error) {
+	slog.Info("down",
+		slog.Any("arg", p))
+
+	fmt.Printf("[*] executing: podman compose %s\n", strings.Join(p.RemoteArgs, " "))
+	fmt.Println("──────────────────────────────────────────────────")
+	remoteCmd := fmt.Sprintf("cd '%s' && podman compose %s", p.RemoteDir, shellJoin(p.RemoteArgs))
+
+	err := utils.SSHRun(remoteCmd)
+	if err != nil {
+		return "", err
+	}
+	fmt.Println("──────────────────────────────────────────────────")
+	return p.UID, nil
+}
+
 func (p *PodmanArg) RsyncToRemote() error {
 	cmdArgs := []string{
 		"-p", Password,
@@ -122,9 +157,9 @@ func (p *PodmanArg) RsyncToRemote() error {
 	return utils.CMDRun("sshpass", cmdArgs...)
 }
 
-func modifyComposeFile(remotePath string) error {
+func (p *PodmanArg) ModifyComposeFile() error {
 	composeFile := "docker-compose.yml"
-	output, _ := utils.SSEOutput("test -f '%s/%s' || echo 'notfound'", remotePath, composeFile)
+	output, _ := utils.SSEOutput("test -f '%s/%s' || echo 'notfound'", p.RemoteDir, composeFile)
 	if strings.TrimSpace(output) == "notfound" {
 		composeFile = "docker-compose.yaml"
 	}
@@ -137,7 +172,7 @@ func modifyComposeFile(remotePath string) error {
 	}
 
 	for _, cmdTemplate := range sedCmds {
-		cmd := fmt.Sprintf(cmdTemplate, remotePath, composeFile)
+		cmd := fmt.Sprintf(cmdTemplate, p.RemoteDir, composeFile)
 		if err := utils.SSHRun(cmd); err != nil {
 			return err
 		}
@@ -151,7 +186,7 @@ func modifyComposeFile(remotePath string) error {
 		/^\s+- \.\/[^:]+:[^:]+:.*z/ { print; next }
 		{ print }
 		' '%s/%s' > '%s/%s.tmp' && mv '%s/%s.tmp' '%s/%s'
-	`, remotePath, composeFile, remotePath, composeFile, remotePath, composeFile, remotePath, composeFile)
+	`, p.RemoteDir, composeFile, p.RemoteDir, composeFile, p.RemoteDir, composeFile, p.RemoteDir, composeFile)
 
 	return utils.SSHRun(awkCmd)
 }

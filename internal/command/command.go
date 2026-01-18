@@ -15,6 +15,7 @@ type PodmanArg struct {
 	UID        string
 	LocalDir   string
 	RemoteDir  string
+	Command    string
 	RemoteArgs []string
 	Target     string
 	File       string
@@ -124,6 +125,11 @@ func parseArgs(args []string) (*PodmanArg, error) {
 			i++
 		}
 	}
+
+	if len(newArg.RemoteArgs) > 0 {
+		newArg.Command = newArg.RemoteArgs[0]
+	}
+
 	return newArg, nil
 }
 

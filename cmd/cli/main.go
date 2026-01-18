@@ -30,8 +30,8 @@ func main() {
 	switch parseCmd.RemoteArgs[0] {
 	case "domain":
 	case "deploy":
-	case "up":
-		uid, err := parseCmd.Up()
+	default:
+		uid, err := parseCmd.ComposeCMD()
 		if err != nil {
 			slog.Error("failed to connect to remote server",
 				"err", err)
