@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"path/filepath"
 	"strings"
@@ -55,7 +56,7 @@ func (p *PodmanArg) up(d *model.Pod) (*model.Pod, error) {
 
 	// * 同步檔案夾資料
 	fmt.Println("[*] syncing files")
-	if err := p.RsyncToRemote(); err != nil {
+	if err := p.RsyncToRemote(d); err != nil {
 		return nil, err
 	}
 	fmt.Println("──────────────────────────────────────────────────" + Reset)
@@ -125,26 +126,10 @@ func (p *PodmanArg) up(d *model.Pod) (*model.Pod, error) {
 	}
 
 	// *  發送 Pod 資訊到 API
-	fmt.Println("[*] syncing pod info to database")
-	jsonData, err := json.Marshal(d)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal json: %w", err)
+	if err := upsertPod(d); err != nil {
+		return nil, fmt.Errorf("[x] failed to upsert pod: %w", err)
 	}
-
-	resp, err := http.Post(
-		"http://localhost:8080/pod/upsert",
-		"application/json",
-		bytes.NewBuffer(jsonData),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to upsert pod: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("failed to upsert pod: status %d, body: %s", resp.StatusCode, string(body))
-	}
+	recordPod(d, "up")
 
 	return d, nil
 }
@@ -187,6 +172,8 @@ func (p *PodmanArg) clear(d *model.Pod) (*model.Pod, error) {
 		return nil, fmt.Errorf("failed to remove folder: %w", err)
 	}
 	fmt.Println(Hint + "──────────────────────────────────────────────────" + Reset)
+
+	recordPod(d, "clear")
 	return d, nil
 }
 
@@ -205,14 +192,29 @@ func (p *PodmanArg) runCMD(d *model.Pod) (*model.Pod, error) {
 	if p.Command == "down" {
 		removePod(d.UID)
 	}
+	recordPod(d, p.Command)
 	return d, nil
 }
 
-func (p *PodmanArg) RsyncToRemote() error {
+func (p *PodmanArg) RsyncToRemote(d *model.Pod) error {
 	env, err := utils.GetENV()
 	if err != nil {
 		return err
 	}
+
+	checkDirCmd := fmt.Sprintf("[ -d %s ] && [ -n \"$(ls -A %s)\" ] && echo 'not-empty' || echo 'empty'",
+		p.RemoteDir, p.RemoteDir)
+	checkDirArgs := []string{
+		"-p", env.Password,
+		"ssh", "-o", "StrictHostKeyChecking=no",
+		env.Remote,
+		checkDirCmd,
+	}
+	output, err := utils.CMDOutput("sshpass", checkDirArgs...)
+	if err != nil {
+		return fmt.Errorf("check remote directory failed: %w", err)
+	}
+	isRemoteEmpty := strings.TrimSpace(output) == "empty"
 
 	excludes := []string{
 		"--exclude=node_modules/", "--exclude=vendor/", "--exclude=__pycache__/",
@@ -228,30 +230,43 @@ func (p *PodmanArg) RsyncToRemote() error {
 		fmt.Sprintf("%s:%s/", env.Remote, p.RemoteDir),
 	}
 
-	fmt.Println("[*] checking changes")
-	fmt.Println(Hint + "──────────────────────────────────────────────────")
-	checkArgs := []string{
-		"-p", env.Password,
-		"rsync",
-		"-avni",
-		"--delete",
-	}
-	checkArgs = append(checkArgs, excludes...)
-	checkArgs = append(checkArgs, baseArgs...)
-	output, err := utils.CMDOutput("sshpass", checkArgs...)
-	if err != nil {
-		return fmt.Errorf("preview failed: %w", err)
-	}
-	fmt.Print(output)
-	fmt.Println(Hint + "──────────────────────────────────────────────────" + Reset)
-
-	if changeExist(output) {
-		fmt.Print("[!] confirm sync? (y/N): ")
-		var confirm string
-		fmt.Scanln(&confirm)
-		if confirm != "y" && confirm != "Y" {
-			return fmt.Errorf("cancelled")
+	if !isRemoteEmpty {
+		fmt.Println("[*] checking changes")
+		fmt.Println(Hint + "──────────────────────────────────────────────────")
+		checkArgs := []string{
+			"-p", env.Password,
+			"rsync",
+			"-avni",
+			"--delete",
 		}
+		checkArgs = append(checkArgs, excludes...)
+		checkArgs = append(checkArgs, baseArgs...)
+		output, err = utils.CMDOutput("sshpass", checkArgs...)
+		if err != nil {
+			return fmt.Errorf("preview failed: %w", err)
+		}
+		fmt.Print(output)
+		fmt.Println(Hint + "──────────────────────────────────────────────────" + Reset)
+
+		if changeExist(output) {
+			fmt.Print("[!] confirm sync? (y/N): ")
+			var confirm string
+			fmt.Scanln(&confirm)
+			if confirm != "y" && confirm != "Y" {
+				return fmt.Errorf("cancelled")
+			}
+			recordPod(d, "overwrite")
+		}
+	} else {
+		recordPod(d, "sync")
+	}
+
+	excludes = []string{
+		"--exclude=node_modules/", "--exclude=vendor/", "--exclude=__pycache__/",
+		"--exclude=*.pyc", "--exclude=.venv/", "--exclude=venv/", "--exclude=env/",
+		"--exclude=.env.local", "--exclude=.git/", "--exclude=.gitignore",
+		"--exclude=*.log", "--exclude=.DS_Store", "--exclude=Thumbs.db",
+		"--exclude=.next/", "--exclude=app/package-lock.json",
 	}
 
 	fmt.Println("[*] syncing")
@@ -313,6 +328,31 @@ func shellJoin(args []string) string {
 	return strings.Join(escaped, " ")
 }
 
+func upsertPod(d *model.Pod) error {
+	fmt.Println("[*] syncing pod info to database")
+	jsonData, err := json.Marshal(d)
+	if err != nil {
+		return err
+	}
+
+	resp, err := http.Post(
+		"http://localhost:8080/pod/upsert",
+		"application/json",
+		bytes.NewBuffer(jsonData),
+	)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("status %d, body: %s", resp.StatusCode, string(body))
+	}
+
+	return nil
+}
+
 func removePod(uid string) {
 	jsonData, err := json.Marshal(&model.Pod{
 		Dismiss: 1,
@@ -337,6 +377,37 @@ func removePod(uid string) {
 	if resp.StatusCode != http.StatusOK {
 		return
 	}
+}
+
+func recordPod(d *model.Pod, content string) error {
+	fmt.Println("[*] add record to database")
+	jsonData, err := json.Marshal(&model.Record{
+		UID:      d.UID,
+		Content:  content,
+		Hostname: d.Hostname,
+		IP:       d.IP,
+	})
+	slog.Info("", "data", jsonData)
+	if err != nil {
+		return err
+	}
+
+	resp, err := http.Post(
+		"http://localhost:8080/pod/record/insert",
+		"application/json",
+		bytes.NewBuffer(jsonData),
+	)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("status %d, body: %s", resp.StatusCode, string(body))
+	}
+
+	return nil
 }
 
 // * exmaple

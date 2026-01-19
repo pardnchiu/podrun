@@ -13,12 +13,6 @@ type SQLite struct {
 	db *sql.DB
 }
 
-type Record struct {
-	ID      int64  `json:"id"`
-	PodID   int64  `json:"pod_id"`
-	Content string `json:"content"`
-}
-
 type ContainerRecord struct {
 	LocalDir  string `json:"local_dir"`
 	RemoteDir string `json:"remote_dir"`
@@ -66,7 +60,6 @@ func (s *SQLite) UpsertPod(ctx context.Context, d *model.Pod) error {
     ?
   )
   ON CONFLICT(uid) DO UPDATE SET
-    pod_uid = excluded.pod_uid,
     pod_name = excluded.pod_name,
     local_dir = excluded.local_dir,
     remote_dir = excluded.remote_dir,
@@ -110,7 +103,24 @@ func (s *SQLite) UpdatePod(ctx context.Context, d *model.Pod) error {
 	return err
 }
 
-func (s *SQLite) ListContainers(ctx context.Context) ([]model.Pod, error) {
+func (s *SQLite) InsertRecord(ctx context.Context, d *model.Record) error {
+	_, err := s.db.ExecContext(ctx, `
+  INSERT INTO records (
+    pod_id, content, hostname, ip
+  )
+  VALUES (
+    (SELECT id FROM pods WHERE uid = ?), ?, ?, ?
+  )
+  `,
+		d.UID,
+		d.Content,
+		d.Hostname,
+		d.IP,
+	)
+	return err
+}
+
+func (s *SQLite) ListPods(ctx context.Context) ([]model.Pod, error) {
 	rows, err := s.db.QueryContext(ctx, `
 	SELECT
 	  id, uid, pod_uid, pod_name, local_dir,

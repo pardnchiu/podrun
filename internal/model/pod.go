@@ -19,3 +19,12 @@ type Pod struct {
 	UpdatedAt time.Time `json:"updated_at"`
 	Dismiss   int       `json:"dismiss"`
 }
+
+type Record struct {
+	ID       int64  `json:"id"`
+	PodID    int64  `json:"pod_id"`
+	UID      string `json:"uid"`
+	Content  string `json:"content"`
+	Hostname string `json:"hostname"`
+	IP       string `json:"ip"`
+}

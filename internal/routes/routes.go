@@ -7,16 +7,24 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/pardnchiu/go-podrun/internal/database"
 	"github.com/pardnchiu/go-podrun/internal/model"
+	"github.com/pardnchiu/go-podrun/internal/utils"
 )
 
 func New(db *database.SQLite) error {
 	r := gin.Default()
 
+	ip, err := utils.GetLocalIP()
+	if err != nil {
+		return err
+	}
+
+	r.SetTrustedProxies([]string{"127.0.0.1", ip})
+
 	r.GET("/", func(ctx *gin.Context) {
 		ctx.String(http.StatusOK, "adsf")
 	})
 	r.GET("/pod/list", func(ctx *gin.Context) {
-		containers, err := db.ListContainers(ctx.Request.Context())
+		containers, err := db.ListPods(ctx.Request.Context())
 		if err != nil {
 			ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
@@ -53,6 +61,20 @@ func New(db *database.SQLite) error {
 		}
 
 		if err := db.UpdatePod(ctx.Request.Context(), &pod); err != nil {
+			ctx.String(http.StatusInternalServerError, err.Error())
+			return
+		}
+
+		ctx.String(http.StatusOK, "ok")
+	})
+	r.POST("/pod/record/insert", func(ctx *gin.Context) {
+		var record model.Record
+		if err := ctx.ShouldBindJSON(&record); err != nil {
+			ctx.String(http.StatusBadRequest, err.Error())
+			return
+		}
+
+		if err := db.InsertRecord(ctx.Request.Context(), &record); err != nil {
 			ctx.String(http.StatusInternalServerError, err.Error())
 			return
 		}

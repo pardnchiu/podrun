@@ -1,55 +1,81 @@
 # Update Log
 
-> Generated: 2026-01-19 17:58 (+00:00)
-> v0.8.0 → v0.9.0
+> Generated: 2026-01-20 09:15 (+00:00)
+> v0.9.0 → v0.10.0
 
 ## Recommended Commit Message
 
-feat: add rsync dry-run preview with user confirmation before sync
+feat: add pod operation recording with new records API endpoint
 <details>
 <summary>翻譯</summary>
-feat: 新增 rsync dry-run 預覽與同步前使用者確認機制
+feat: 新增 Pod 操作紀錄功能與 records API 端點
 </details>
 
 ***
 
 ## Summary
 
-Add interactive rsync preview with dry-run mode, allowing users to inspect file changes before confirming synchronization. Also add `CMDOutput` utility function for capturing command output.
+Add operation recording system to track pod lifecycle events (up, down, clear, sync, overwrite). Introduces `Record` model, database insert method, and REST endpoint for audit trail.
 <details>
 <summary>翻譯</summary>
-新增互動式 rsync 預覽功能，使用 dry-run 模式讓使用者在確認同步前檢視檔案變更。同時新增 `CMDOutput` 工具函式以擷取命令輸出。
+新增操作紀錄系統以追蹤 Pod 生命週期事件（up、down、clear、sync、overwrite）。引入 `Record` 模型、資料庫新增方法與 REST 端點用於稽核軌跡。
 </details>
 
 ## Changes
 
 ### FEAT
-- Add rsync dry-run preview (`-avni`) to show pending changes before sync
-- Add user confirmation prompt (`y/N`) before executing actual sync
-- Add `changeExist()` helper to detect meaningful changes in rsync output
-- Add `CMDOutput()` utility function to capture command stdout
+- Add `Record` model with `UID`, `Content`, `Hostname`, `IP` fields
+- Add `recordPod()` function to log pod operations via API
+- Add `InsertRecord()` method in SQLite database layer
+- Add `/pod/record/insert` POST endpoint for record creation
+- Add `hostname` and `ip` columns to `records` table schema
 
 <details>
 <summary>翻譯</summary>
 
-- 新增 rsync dry-run 預覽 (`-avni`) 於同步前顯示待處理變更
-- 新增使用者確認提示 (`y/N`) 於執行實際同步前
-- 新增 `changeExist()` 輔助函式偵測 rsync 輸出中的有效變更
-- 新增 `CMDOutput()` 工具函式擷取命令標準輸出
+- 新增 `Record` 模型含 `UID`、`Content`、`Hostname`、`IP` 欄位
+- 新增 `recordPod()` 函式透過 API 記錄 Pod 操作
+- 新增 SQLite 資料庫層的 `InsertRecord()` 方法
+- 新增 `/pod/record/insert` POST 端點用於建立紀錄
+- 新增 `hostname` 與 `ip` 欄位至 `records` 資料表結構
 
 </details>
 
 ### UPDATE
-- Refactor `RsyncToRemote()` to separate preview and sync phases
-- Expand exclude list with `.next/`, `docker-compose.yml`, `docker-compose.yaml`, `app/package-lock.json`
-- Relocate visual separator to preview and sync phases for better UX
+- Modify `RsyncToRemote()` to skip dry-run preview when remote directory is empty
+- Modify rsync exclude list to remove `docker-compose.yml`, `docker-compose.yaml` from sync phase
+- Add trusted proxy configuration (`127.0.0.1`, local IP) to Gin router
 
 <details>
 <summary>翻譯</summary>
 
-- 重構 `RsyncToRemote()` 將預覽與同步階段分離
-- 擴充排除清單加入 `.next/`、`docker-compose.yml`、`docker-compose.yaml`、`app/package-lock.json`
-- 移動視覺分隔線至預覽與同步階段以改善使用者體驗
+- 修改 `RsyncToRemote()` 當遠端目錄為空時跳過 dry-run 預覽
+- 修改 rsync 排除清單，同步階段移除 `docker-compose.yml`、`docker-compose.yaml`
+- 新增信任代理配置（`127.0.0.1`、本機 IP）至 Gin 路由器
+
+</details>
+
+### REFACTOR
+- Extract `upsertPod()` helper function from inline HTTP POST logic
+- Rename `ListContainers()` to `ListPods()` for consistency
+- Move `Record` struct from `database/sqlite.go` to `model/pod.go`
+
+<details>
+<summary>翻譯</summary>
+
+- 從內嵌 HTTP POST 邏輯中提取 `upsertPod()` 輔助函式
+- 將 `ListContainers()` 重新命名為 `ListPods()` 以保持一致性
+- 將 `Record` 結構從 `database/sqlite.go` 移至 `model/pod.go`
+
+</details>
+
+### FIX
+- Remove incorrect `pod_uid = excluded.pod_uid` from UPSERT conflict clause
+
+<details>
+<summary>翻譯</summary>
+
+- 移除 UPSERT 衝突子句中錯誤的 `pod_uid = excluded.pod_uid`
 
 </details>
 
@@ -59,8 +85,11 @@ Add interactive rsync preview with dry-run mode, allowing users to inspect file 
 
 | File | Status | Tag |
 |------|--------|-----|
-| `internal/command/composeCMD.go` | Modified | FEAT, UPDATE |
-| `internal/utils/command.go` | Modified | FEAT |
+| `internal/command/composeCMD.go` | Modified | FEAT, UPDATE, REFACTOR |
+| `internal/database/sqlite.go` | Modified | FEAT, REFACTOR, FIX |
+| `internal/model/pod.go` | Modified | FEAT |
+| `internal/routes/routes.go` | Modified | FEAT, UPDATE |
+| `sql/create.sql` | Modified | FEAT |
 
 ***
 
