@@ -70,20 +70,20 @@ func (p *PodmanArg) up(d *model.Pod) (*model.Pod, error) {
 	// * 關閉舊的容器 (if exists)
 	fmt.Println("[*] cleaning up old containers")
 	_, _ = utils.SSEOutput(fmt.Sprintf(
-		"cd '%s' && podman compose down -v >/dev/null 2>&1",
+		"cd '%s' && podman compose -f docker-compose.podrun.yml down -v >/dev/null 2>&1",
 		p.RemoteDir,
 	))
 	removePod(d.UID)
 
 	// * 執行動作
-	fmt.Printf("[*] executing: podman compose %s\n", strings.Join(p.RemoteArgs, " "))
+	fmt.Printf("[*] executing: podman compose -f docker-compose.podrun.yml %s\n", strings.Join(p.RemoteArgs, " "))
 	fmt.Println(Hint + "──────────────────────────────────────────────────")
-	remoteCmd := fmt.Sprintf("cd '%s' && podman compose %s 2>&1", p.RemoteDir, shellJoin(p.RemoteArgs))
+	remoteCmd := fmt.Sprintf("cd '%s' && podman compose -f docker-compose.podrun.yml %s 2>&1", p.RemoteDir, shellJoin(p.RemoteArgs))
 	if !p.Detach {
 		remoteCmd = fmt.Sprintf(`
 				cleanup() {
 					echo "[*] stopping containers"
-					cd '%s' && podman compose down
+					cd '%s' && podman compose -f docker-compose.podrun.yml down
 				}
 				trap cleanup INT TERM
 				%s
@@ -139,7 +139,7 @@ func (p *PodmanArg) clear(d *model.Pod) (*model.Pod, error) {
 	fmt.Println("[*] remove containers and volumes")
 	fmt.Println(Hint + "──────────────────────────────────────────────────")
 	downCmd := fmt.Sprintf(
-		"cd '%s' && podman compose down -v 2>&1 | grep -v 'no container\\|no pod' || true",
+		"cd '%s' && podman compose -f docker-compose.podrun.yml down -v 2>&1 | grep -v 'no container\\|no pod' || true",
 		p.RemoteDir,
 	)
 	removePod(d.UID)
@@ -152,7 +152,7 @@ func (p *PodmanArg) clear(d *model.Pod) (*model.Pod, error) {
 	fmt.Println("[*] clean images")
 	fmt.Println(Hint + "──────────────────────────────────────────────────")
 	imageCmd := fmt.Sprintf(
-		"cd '%s' && podman compose down --rmi all 2>&1 | grep -v 'no container\\|no pod\\|no image' || true",
+		"cd '%s' && podman compose -f docker-compose.podrun.yml down --rmi all 2>&1 | grep -v 'no container\\|no pod\\|no image' || true",
 		p.RemoteDir,
 	)
 	if err := utils.SSHRun(imageCmd); err != nil {
@@ -178,7 +178,7 @@ func (p *PodmanArg) clear(d *model.Pod) (*model.Pod, error) {
 }
 
 func (p *PodmanArg) runCMD(d *model.Pod) (*model.Pod, error) {
-	fmt.Printf("[*] executing: podman compose %s\n", strings.Join(p.RemoteArgs, " "))
+	fmt.Printf("[*] executing: podman compose -f docker-compose.podrun.yml %s\n", strings.Join(p.RemoteArgs, " "))
 	fmt.Println(Hint + "──────────────────────────────────────────────────")
 	if err := utils.SSHRun(fmt.Sprintf(
 		"cd '%s' && podman compose %s",
@@ -221,7 +221,9 @@ func (p *PodmanArg) RsyncToRemote(d *model.Pod) error {
 		"--exclude=*.pyc", "--exclude=.venv/", "--exclude=venv/", "--exclude=env/",
 		"--exclude=.env.local", "--exclude=.git/", "--exclude=.gitignore",
 		"--exclude=*.log", "--exclude=.DS_Store", "--exclude=Thumbs.db",
-		"--exclude=.next/", "--exclude=docker-compose.yml", "--exclude=docker-compose.yaml", "--exclude=app/package-lock.json",
+		"--exclude=.next/",
+		"--exclude=docker-compose.podrun.yml",
+		"--exclude=app/package-lock.json", "--exclude=app/package-lock.json",
 	}
 
 	baseArgs := []string{
@@ -283,10 +285,34 @@ func (p *PodmanArg) RsyncToRemote(d *model.Pod) error {
 }
 
 func (p *PodmanArg) ModifyComposeFile() error {
-	composeFile := "docker-compose.yml"
-	output, _ := utils.SSEOutput("test -f '%s/%s' || echo 'notfound'", p.RemoteDir, composeFile)
-	if strings.TrimSpace(output) == "notfound" {
-		composeFile = "docker-compose.yaml"
+	var composeFile string
+
+	output, _ := utils.SSEOutput(fmt.Sprintf(
+		"test -f '%s/docker-compose.yml' && echo 'yml' || echo 'notfound'",
+		p.RemoteDir,
+	))
+	if strings.TrimSpace(output) == "yml" {
+		composeFile = "docker-compose.yml"
+	} else {
+		output, _ = utils.SSEOutput(fmt.Sprintf(
+			"test -f '%s/docker-compose.yaml' && echo 'yaml' || echo 'notfound'",
+			p.RemoteDir,
+		))
+		if strings.TrimSpace(output) == "yaml" {
+			composeFile = "docker-compose.yaml"
+		} else {
+			return fmt.Errorf("docker-compose.yml or docker-compose.yaml not found")
+		}
+	}
+
+	podrunFile := "docker-compose.podrun.yml"
+	copyCmd := fmt.Sprintf(
+		"cp '%s/%s' '%s/%s'",
+		p.RemoteDir, composeFile,
+		p.RemoteDir, podrunFile,
+	)
+	if err := utils.SSHRun(copyCmd); err != nil {
+		return err
 	}
 
 	// 移除 ports
@@ -297,7 +323,7 @@ func (p *PodmanArg) ModifyComposeFile() error {
 	}
 
 	for _, cmdTemplate := range sedCmds {
-		cmd := fmt.Sprintf(cmdTemplate, p.RemoteDir, composeFile)
+		cmd := fmt.Sprintf(cmdTemplate, p.RemoteDir, podrunFile)
 		if err := utils.SSHRun(cmd); err != nil {
 			return err
 		}
@@ -311,7 +337,7 @@ func (p *PodmanArg) ModifyComposeFile() error {
 		/^\s+- \.\/[^:]+:[^:]+:.*z/ { print; next }
 		{ print }
 		' '%s/%s' > '%s/%s.tmp' && mv '%s/%s.tmp' '%s/%s'
-	`, p.RemoteDir, composeFile, p.RemoteDir, composeFile, p.RemoteDir, composeFile, p.RemoteDir, composeFile)
+	`, p.RemoteDir, podrunFile, p.RemoteDir, podrunFile, p.RemoteDir, podrunFile, p.RemoteDir, podrunFile)
 
 	return utils.SSHRun(awkCmd)
 }
